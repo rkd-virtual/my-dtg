@@ -1,0 +1,8 @@
+/*.login_logo{margin-left: auto;margin-right: auto;}*/
+
+.login_logo {
+  display: block;
+  margin: 0 auto 20px auto;
+  width: 140px;
+  height: auto;
+}

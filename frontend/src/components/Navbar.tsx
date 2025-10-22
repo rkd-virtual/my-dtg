@@ -116,6 +116,7 @@ export default function Navbar() {
           )}
 
           {/* Account menu (only when authenticated) */}
+          {/* 
           {authed && (
             <div className="relative group">
               <button
@@ -124,7 +125,7 @@ export default function Navbar() {
                 aria-expanded="false"
                 title="Account"
               >
-                {/* Simple avatar dot */}
+              
                 <span>◉</span>
               </button>
               <div className="invisible absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-neutral-900 p-2 opacity-0 shadow-lg ring-1 ring-white/10 transition-all group-hover:visible group-hover:opacity-100">
@@ -142,7 +143,7 @@ export default function Navbar() {
                 </button>
               </div>
             </div>
-          )}
+          )} */}
         </nav>
 
         {/* Mobile hamburger */}

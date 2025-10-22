@@ -6,6 +6,7 @@ import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
 import FormInput from "../components/FormInput";
 import type { AuthResponse } from "../types/auth";
+import logo from "../assets/DTG_Logo_login.svg";
 
 const schema = z.object({
   email: z.string().email(),
@@ -37,7 +38,7 @@ export default function Login() {
       setLoading(true);
       const { data } = await api.post<AuthResponse>("/auth/login", form);
       setToken(data.token);
-      nav("/dashboard");
+      nav("/portal/dashboard");
     } catch (err: any) {
       setServerError(err?.response?.data?.message || "Login failed");
     } finally {
@@ -48,6 +49,7 @@ export default function Login() {
   return (
     <Layout>
       <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-8 shadow">
+        <img src={logo} alt="Login Logo" className="login_logo"/>
         <h1 className="mb-6 text-center text-2xl font-semibold">Log in to DTG’s Amazon Portal</h1>
         {serverError && <p className="mb-3 rounded-md bg-red-50 p-3 text-sm text-red-700">{serverError}</p>}
         <form onSubmit={submit} className="space-y-4">
@@ -57,13 +59,16 @@ export default function Login() {
             value={form.password} onChange={onChange} error={errors.password} />
           <button
             disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 py-2.5 text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="w-full rounded-lg bg-amber-500 hover:bg-amber-600 py-2.5 text-black font-bold disabled:opacity-50"
           >
-            {loading ? "Logging in..." : "Log In"}
+            {loading ? "Please wait .." : "Log In"}
           </button>
         </form>
         <p className="mt-4 text-center text-sm">
           Don’t have an account? <Link to="/signup" className="text-indigo-600">Sign Up</Link>
+        </p>
+        <p className="mt-4 text-center text-sm">
+          <Link to="/forgot-password" className="text-indigo-600">Forgot password?</Link>
         </p>
       </div>
     </Layout>

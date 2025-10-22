@@ -237,15 +237,21 @@ def login():
     email    = (data.get("email") or "").strip().lower()
     password = (data.get("password") or "")
 
-    # Validate input fields
+    # 1) Basic validation
     if not email or not password:
         return jsonify(message="Email and password are required"), 400
 
+    # 2) Look up user by email
     user = User.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
-        return jsonify(message="Invalid email or password"), 401
+    if not user:
+        # No user with that email
+        return jsonify(message="No account found. Please sign up first."), 404
 
-    # Block login if email not verified
+    # 3) Verify password
+    if not user.check_password(password):
+        return jsonify(message="The provided credentials are invalid."), 401
+
+    # 4) Verify email confirmation
     if not user.is_verified:
         return jsonify(message="Please verify your email to continue"), 403
 
@@ -253,7 +259,7 @@ def login():
     token = create_access_token(identity=user.id)
     resp  = jsonify(token=token)
     set_access_cookies(resp, token)
-    return resp
+    return resp, 200
 
 # -----------------------------------------------------------
 # LOGOUT — removes JWT cookies from browser (ends session)
