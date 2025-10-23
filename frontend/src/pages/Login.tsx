@@ -59,12 +59,12 @@ export default function Login() {
             value={form.password} onChange={onChange} error={errors.password} />
           <button
             disabled={loading}
-            className="w-full rounded-lg bg-amber-500 hover:bg-amber-600 py-2.5 text-black font-bold disabled:opacity-50"
+            className="w-full rounded-lg bg-amber-500 hover:bg-amber-600 py-2.5 text-black disabled:opacity-50"
           >
             {loading ? "Please wait .." : "Log In"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm">
+        <p className="mt-4 text-center text-sm text-gray-500">
           Don’t have an account? <Link to="/signup" className="text-indigo-600">Sign Up</Link>
         </p>
         <p className="mt-4 text-center text-sm">

@@ -144,7 +144,75 @@ def resend_verification():
     token       = make_verify_token(user.id)
     frontend    = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
     verify_link = f"{frontend}/setup-profile?member={quote(token, safe='')}"
-    html        = f"<p>Open this link to verify and finish setup:<br>{verify_link}</p>"
+    
+    html = f"""\
+    <!doctype html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Verify your email</title>
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+    </head>
+    <body style="margin:0;padding:0;background:#f5f5f5;">
+        <!-- preheader (hidden preview text) -->
+        <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+        Please verify your email address to finish creating your account.
+        </div>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;">
+        <tr>
+            <td align="center" style="padding:24px;">
+            <!-- card -->
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:8px;">
+                <tr>
+                <td style="padding:28px 28px 8px 28px;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+                    <p style="margin:0 0 16px 0;font-size:16px;line-height:24px;">
+                    Thank you for creating an account! To finish signing up, please verify your email address.
+                    </p>
+                    <p style="margin:0 0 20px 0;font-size:16px;line-height:24px;">
+                    To confirm your email, please click this link:
+                    </p>
+                </td>
+                </tr>
+
+                <!-- button (bulletproof table) -->
+                <tr>
+                <td align="center" style="padding:0 28px 24px 28px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:544px;">
+                    <tr>
+                        <td align="center" bgcolor="#1f2937" style="border-radius:8px;">
+                        <a href="{verify_link}"
+                            style="display:block;padding:14px 18px;font-family:Arial,Helvetica,sans-serif;
+                                    font-size:16px;line-height:24px;color:#ffffff;text-decoration:none;
+                                    font-weight:600;border-radius:8px;background:#1f2937;">
+                            Verify Email
+                        </a>
+                        </td>
+                    </tr>
+                    </table>
+                </td>
+                </tr>
+
+                <!-- footer copy -->
+                <tr>
+                <td style="padding:4px 28px 28px 28px;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+                    <p style="margin:0 0 8px 0;font-size:14px;line-height:22px;">
+                    Welcome and thank you!
+                    </p>
+                    <p style="margin:12px 0 0 0;font-size:12px;line-height:18px;color:#6b7280;">
+                    If the button doesn’t work, copy and paste this URL into your browser:<br>
+                    <span style="word-break:break-all;color:#374151;">{verify_link}</span>
+                    </p>
+                </td>
+                </tr>
+            </table>
+            <!-- /card -->
+            </td>
+        </tr>
+        </table>
+    </body>
+    </html>
+    """
     send_mail(user.email, "Your verification link", html)
     return jsonify(message="Verification email resent"), 200
 

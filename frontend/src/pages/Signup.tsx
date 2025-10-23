@@ -4,9 +4,22 @@ import { api } from "../lib/api";
 import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
 import FormInput from "../components/FormInput";
+import logo from "../assets/DTG_Logo_login.svg";
+
+/*const schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, "Must be longer than 8 characters."),
+});*/
 
 const schema = z.object({
-  email: z.string().email(),
+  email: z
+    .string()
+    .email("Invalid email address.")
+    .refine(
+      (val) =>
+        val.endsWith("@dtgpower.com") || val.endsWith("@amazon.com"),
+      { message: "domain_not_allowed" }
+    ),
   password: z.string().min(8, "Must be longer than 8 characters."),
 });
 
@@ -39,6 +52,7 @@ export default function Signup() {
       setLoading(true);
       await api.post("/auth/signup", form); // backend sends verification email
       // Go to the "verify email" screen and show the address
+      sessionStorage.setItem("pendingEmail", form.email);
       nav("/verify-email-sent", { state: { email: form.email }, replace: true });
     } catch (err: any) {
       const msg =
@@ -55,10 +69,9 @@ export default function Signup() {
   return (
     <Layout>
       <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-8 shadow">
-        <h1 className="mb-2 text-center text-2xl font-semibold">Create an account</h1>
-        <p className="mb-6 text-center text-sm text-gray-600">
-          Use your Amazon email to sign up.
-        </p>
+        <img src={logo} alt="Login Logo" className="login_logo"/>
+        <h3 className="mb-2 text-center text-lg mb-10 font-semibold">Create an account to access DTG’s Amazon Portal</h3>
+        
 
         {serverError && (
           <p className="mb-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
@@ -74,8 +87,15 @@ export default function Signup() {
             placeholder="e.g. yourname@amazon.com"
             value={form.email}
             onChange={onChange}
-            error={errors.email}
+            error={errors.email !== "domain_not_allowed" ? errors.email : ""}
           />
+
+          {errors.email === "domain_not_allowed" && (
+            <p className="text-sm-domain-validation text-red-600">
+              Please note: ONLY dtgpower.com and amazon.com domains are allowed.
+            </p>
+          )}
+
           <FormInput
             name="password"
             label="Create Password"
@@ -84,6 +104,7 @@ export default function Signup() {
             onChange={onChange}
             error={errors.password}
           />
+          <p className="text-sm italic">Must be longer than 8 characters.</p>
           <button
             disabled={loading}
             className="w-full rounded-lg bg-amber-500 py-2.5 text-black font-bold hover:bg-amber-600 disabled:opacity-50"

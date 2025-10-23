@@ -4,6 +4,15 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  theme: { extend: {} },
+  theme: { 
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
+      },
+      fontSize: {
+        base: '17px',
+      },
+    }, 
+  },
   plugins: [require('@tailwindcss/forms')],
 }

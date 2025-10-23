@@ -6,3 +6,10 @@
   width: 140px;
   height: auto;
 }
+.max-w-md{
+  max-width: 30rem;
+}
+.text-sm-domain-validation{
+  font-size: 12px;
+  font-weight: bold;
+}

@@ -12,29 +12,34 @@ const NAV_ITEMS: Array<
   {
     label: "Industries",
     submenu: [
-      { label: "Retail", to: "/industries/retail" },
-      { label: "Healthcare", to: "/industries/healthcare" },
+      { label: "Warehouse Logistics", to: "/industries/warehouse-logistics" },
       { label: "Manufacturing", to: "/industries/manufacturing" },
+      { label: "Biopharma", to: "/industries/biopharma" },
+      { label: "Hospitality", to: "/industries/hospitality" },
+      { label: "Healthcare", to: "/industries/healthcare" },      
     ],
   },
   {
     label: "Products",
     submenu: [
-      { label: "Power Systems", to: "/products/power-systems" },
-      { label: "UPS", to: "/products/ups" },
-      { label: "Batteries", to: "/products/batteries" },
+      { label: "Battery Systems", to: "/battery-systems" },
+      { label: "Mobile Workstations", to: "/industries/warehouse-logistics" },
+      { label: "Hospitality Carts", to: "/industries/hospitality" },
+      { label: "Cleanroom Carts", to: "/industries/biopharma" },
+      { label: "Workstation on Wheels", to: "/industries/healthcare" },
+      { label: "OEM & Custom Solutions", to: "/oem-custom-solutions" },
     ],
   },
   {
     label: "Resources",
     submenu: [
-      { label: "Docs", to: "/resources/docs" },
-      { label: "Case Studies", to: "/resources/case-studies" },
+      { label: "Resource Library", to: "/resources/resource-library" },
       { label: "Support", to: "/resources/support" },
+      { label: "Blog", to: "/resources/blog" },
     ],
   },
-  { label: "About Us", to: "/about" },
-  { label: "Contact Us", to: "/contact" },
+  { label: "About Us", to: "/about-us" },
+  { label: "Contact Us", to: "/contact-us" },
 ];
 
 export default function Navbar() {
@@ -62,7 +67,7 @@ export default function Navbar() {
             item.submenu ? (
               <div key={item.label} className="group relative">
                 <button
-                  className="inline-flex items-center gap-1 text-sm font-medium hover:text-gray-200 focus:outline-none"
+                  className="inline-flex items-center gap-1 text-base font-medium hover:text-gray-200 focus:outline-none"
                   aria-haspopup="true"
                   aria-expanded="false"
                 >
