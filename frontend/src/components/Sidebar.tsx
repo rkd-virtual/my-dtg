@@ -1,13 +1,13 @@
 import { NavLink } from "react-router-dom";
 
 const items = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/orders", label: "Orders & Quotes" },
-  { to: "/shop", label: "Shop" },
-  { to: "/cart", label: "Cart" },
-  { to: "/support", label: "Support" },
-  { to: "/rma", label: "RMA" },
-  { to: "/settings", label: "Settings" },
+  { to: "/portal/dashboard", label: "Dashboard" },
+  { to: "/portal/orders", label: "Orders & Quotes" },
+  { to: "/portal/shop", label: "Shop" },
+  { to: "/portal/cart", label: "Cart" },
+  { to: "/portal/support", label: "Support" },
+  { to: "/portal/rma", label: "RMA" },
+  { to: "/portal/settings", label: "Settings" },
 ];
 
 export default function Sidebar() {
