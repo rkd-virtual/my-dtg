@@ -6,7 +6,7 @@ from flask_jwt_extended import (
     create_access_token, jwt_required, get_jwt_identity,
     set_access_cookies, unset_jwt_cookies
 )
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 import os, json
 
@@ -328,6 +328,95 @@ def login():
     resp  = jsonify(token=token)
     set_access_cookies(resp, token)
     return resp, 200
+
+# ----------------------------------------------
+# MEMBER CHECK — authenticates exsisting user 
+# ----------------------------------------------
+@auth_bp.post("/check-member")
+def check_member():
+    """
+    POST /api/auth/check-member
+    Body: { email: "<email>", token: "<optional-setup-token>" }
+
+    Returns 200 with JSON:
+      { exists: bool, allowed: bool, message: str }
+    """
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    token = (data.get("token") or "").strip()
+
+    if not email:
+        return jsonify(message="Email is required"), 400
+
+    try:
+        user = User.query.filter_by(email=email).first()
+    except Exception as e:
+        # DB failure
+        return jsonify(message=f"DB error: {str(e)}"), 500
+
+    if not user:
+        return jsonify({
+            "exists": False,
+            "allowed": False,
+            "message": "This email isn’t registered. Please sign up first."
+        }), 200
+
+    # If a token is supplied, validate it's for the same user
+    if token:
+        try:
+            payload = load_verify_token(token)
+            uid_from_token = int(payload.get("uid"))
+            if user.id != uid_from_token:
+                return jsonify({
+                    "exists": True,
+                    "allowed": False,
+                    "message": "The verification link does not match this email."
+                }), 200
+        except Exception:
+            return jsonify({
+                "exists": True,
+                "allowed": False,
+                "message": "Invalid or expired verification token."
+            }), 200
+
+    # If profile already completed
+    if getattr(user, "profile_completed_at", None):
+        return jsonify({
+            "exists": True,
+            "allowed": False,
+            "message": "Profile already completed. Please log in."
+        }), 200
+
+    # Determine reference timestamp for 30-day window:
+    ts = None
+    if getattr(user, "email_verified_at", None):
+        ts = user.email_verified_at
+    elif getattr(user, "created_at", None):
+        ts = user.created_at
+
+    if ts is None:
+        # No timestamps available: allow by default (or change to deny)
+        return jsonify({"exists": True, "allowed": True, "message": "OK"}), 200
+
+    # Ensure ts is datetime and timezone-aware if possible
+    if isinstance(ts, datetime):
+        now = datetime.now(timezone.utc)
+        # If ts is naive, treat it as UTC:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age = now - ts
+    else:
+        age = timedelta(days=9999)
+
+    if age <= timedelta(days=30):
+        return jsonify({"exists": True, "allowed": True, "message": "OK"}), 200
+
+    # Expired
+    return jsonify({
+        "exists": True,
+        "allowed": False,
+        "message": "This verification link has expired (over 30 days). Please request a new verification email."
+    }), 200
 
 # -----------------------------------------------------------
 # LOGOUT — removes JWT cookies from browser (ends session)
