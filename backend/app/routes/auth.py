@@ -16,7 +16,7 @@ import os, json
 # -----------------------------------------------------------
 from ..extensions import db
 from ..models import User, UserProfile
-from ..utils import make_verify_token, load_verify_token, send_mail
+from ..utils import make_verify_token, load_verify_token, send_mail, generate_reset_code
 
 
 # -----------------------------------------------------------
@@ -380,12 +380,12 @@ def check_member():
             }), 200
 
     # If profile already completed
-    if getattr(user, "profile_completed_at", None):
+    """ if getattr(user, "profile_completed_at", None):
         return jsonify({
             "exists": True,
             "allowed": False,
             "message": "Profile already completed. Please log in."
-        }), 200
+        }), 200 """
 
     # Determine reference timestamp for 30-day window:
     ts = None
@@ -417,6 +417,99 @@ def check_member():
         "allowed": False,
         "message": "This verification link has expired (over 30 days). Please request a new verification email."
     }), 200
+
+# -----------------
+# FORGOT PASSWORD 
+# -----------------
+@auth_bp.post("/forgot-password")
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        # Generic response to avoid enumeration
+        return jsonify(message="If the email exists, a reset code has been sent."), 200
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        # Always return the same message to avoid leaking which emails exist
+        return jsonify(message="If the email exists, a reset code has been sent."), 200
+
+    # generate a plain numeric code (6 digits)
+    raw_code = generate_reset_code(6)  # should return e.g. "023491"
+
+    # save plain code (you asked for normal digit) and expiry (30 minutes)
+    user.password_reset_code = raw_code
+    user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    db.session.add(user)
+    db.session.commit()
+
+    # Email the code. Keep content simple and prominent.
+    html = f"""
+      <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+        <h2>DTG Portal — password reset code</h2>
+        <p style="font-size:28px;font-weight:700;margin:18px 0;">{raw_code}</p>
+        <p>This code is valid for 30 minutes. Enter the code in the portal to reset your password.</p>
+        <p>If you didn't request this, you can ignore this email.</p>
+      </div>
+    """
+    try:
+        send_mail(user.email, "DTG Portal — password reset code", html)
+    except Exception as e:
+        # Log but still return generic response
+        print("send_mail failed:", str(e), flush=True)
+
+    return jsonify(message="If the email exists, a reset code has been sent."), 200
+
+# -----------------------------------------------------------
+# RESET PASSWORD — verify code & set new password
+# -----------------------------------------------------------
+@auth_bp.post("/reset-password")
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    code = (data.get("code") or "").strip()
+    new_password = data.get("new_password") or ""
+
+    if not email or not code or not new_password:
+        return jsonify(message="Email, code and new password are required"), 400
+    if len(new_password) < 8:
+        return jsonify(message="Password must be at least 8 characters"), 400
+    # optional: ensure code is digits-only and length 6
+    if not code.isdigit() or len(code) != 6:
+        return jsonify(message="Invalid reset code format"), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        # keep message generic
+        return jsonify(message="Invalid code or email"), 400
+
+    # ensure a code exists for user
+    if not user.password_reset_code or not user.password_reset_expires_at:
+        return jsonify(message="Invalid reset code"), 400
+
+    # check expiry
+    now = datetime.now(timezone.utc)
+    if user.password_reset_expires_at < now:
+        # clear expired values
+        user.password_reset_code = None
+        user.password_reset_expires_at = None
+        db.session.add(user)
+        db.session.commit()
+        return jsonify(message="Reset code expired"), 400
+
+    # compare codes
+    if user.password_reset_code != code:
+        return jsonify(message="Invalid reset code"), 400
+
+    # success: update password and clear reset fields
+    user.set_password(new_password)
+    user.password_reset_code = None
+    user.password_reset_expires_at = None
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify(message="Password reset successful. Please log in."), 200
+
 
 # -----------------------------------------------------------
 # LOGOUT — removes JWT cookies from browser (ends session)

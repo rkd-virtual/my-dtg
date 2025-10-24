@@ -32,6 +32,8 @@ class User(db.Model):
     is_verified          = db.Column(db.Boolean, nullable=False, server_default="false")
     email_verified_at    = db.Column(db.DateTime)
     profile_completed_at = db.Column(db.DateTime)
+    password_reset_code       = db.Column(db.String(32), nullable=True)
+    password_reset_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at           = db.Column(
                                 db.DateTime, 
                                 default=lambda: datetime.now(timezone.utc), 
@@ -80,3 +82,15 @@ class UserProfile(db.Model):
 
     # Back-reference to User (completes the 1:1 link)
     user = db.relationship("User", back_populates="profile")
+
+
+
+""" class PasswordReset(db.Model):
+    __tablename__ = "password_resets"
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), nullable=False, index=True)
+    code = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def __repr__(self):
+        return f"<PasswordReset {self.email} {self.code}>" """

@@ -8,6 +8,7 @@ import Signup from "./pages/Signup";
 import VerifyEmailSent from "./pages/VerifyEmailSent";
 import SetupProfile from "./pages/SetupProfile";
 import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 
 import { getToken } from "./lib/auth";
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-email-sent" element={<VerifyEmailSent />} />
         <Route path="/setup-profile" element={<SetupProfile />} />
       </Route>

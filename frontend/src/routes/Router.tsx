@@ -6,6 +6,7 @@ import ProtectedRoute from "./ProtectedRoute";
 import VerifyEmailSent from "../pages/VerifyEmailSent";
 import SetupProfile from "../pages/SetupProfile";
 import ForgotPassword from "../pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 export default function Router() {
   return (
@@ -20,6 +21,7 @@ export default function Router() {
       <Route path="/verify-email-sent" element={<VerifyEmailSent />} />
       <Route path="/setup-profile" element={<SetupProfile />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Protected (authenticated) routes */}
       <Route element={<ProtectedRoute />}>

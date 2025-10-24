@@ -1,10 +1,17 @@
 # -------------------------------------------------------------------
 # Imports for environment, email handling, and secure token creation
 # -------------------------------------------------------------------
-import os, smtplib
+import os, smtplib, random
 from email.message import EmailMessage
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import current_app
+
+# -----------------------------------------------------------
+# Generate numeric code
+# -----------------------------------------------------------
+def generate_reset_code(length=6):
+    """Return a zero-padded numeric code as string, e.g. '000123'"""
+    return str(random.randint(0, 10**length - 1)).zfill(length)
 
 # -----------------------------------------------------------
 # Create a serializer object using the app's secret key
