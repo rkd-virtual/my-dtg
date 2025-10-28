@@ -1,28 +1,85 @@
+# -----------------------------------------------------------
+# app/__init__.py
+# -----------------------------------------------------------
+# This file defines the Flask application factory and sets up
+# configuration, extensions, and route blueprints.
+# -----------------------------------------------------------
+
 from flask import Flask, jsonify
 from .config import Config
 from .extensions import db, migrate, jwt, cors
-from .routes.auth import auth_bp
+from .routes.auth import auth_bp,profile_bp
 from .routes.settings import settings_bp
 
 def create_app():
+    """
+    Flask application factory function.
+    Creates and configures an instance of the Flask app.
+    """
+    # -----------------------------------------------------------
+    # Create the Flask app instance
+    # -----------------------------------------------------------
     app = Flask(__name__)
+
+    # -----------------------------------------------------------
+    # Load configuration settings from Config class
+    # (contains database URI, JWT secret, etc.)
+    # -----------------------------------------------------------
     app.config.from_object(Config())
 
+    # -----------------------------------------------------------
+    # Initialize extensions (DB, Migrations, JWT, CORS)
+    # -----------------------------------------------------------
+    
+    # Initialize SQLAlchemy ORM
     db.init_app(app)
-    migrate.init_app(app, db)
-    jwt.init_app(app)
-    cors.init_app(app, resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", [])}}, supports_credentials=True)
 
+    # Enable database migrations
+    migrate.init_app(app, db)
+
+    # Set up JWT authentication
+    jwt.init_app(app)
+
+    cors.init_app(
+        app, 
+        resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", [])}}, 
+        supports_credentials=True
+    )
+
+    # -----------------------------------------------------------
+    # Register Blueprints (modular route handlers)
+    # -----------------------------------------------------------
+    # Auth routes (login, register, etc.)
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
+
+    # App settings routes
     app.register_blueprint(settings_bp, url_prefix="/api")
 
+    # User profile routes
+    app.register_blueprint(profile_bp, url_prefix="/api")
+
+    # -----------------------------------------------------------
+    # Root route for quick health check / info
+    # -----------------------------------------------------------
     @app.get("/")
     def index():
-        # simple JSON welcome; change to redirect if you prefer
+        """
+        Root endpoint returning a simple JSON response.
+        Useful for verifying that the API is reachable.
+        """
         return jsonify(service="DTG API", docs="/api/health")
 
+    #-----------------------------------------------------------
+    # Health check endpoint (used by monitoring tools)
+    # -----------------------------------------------------------
     @app.get("/api/health")
     def health():
+        """
+        Returns a simple OK status.
+        Can be used for uptime monitoring or load balancer checks.
+        """
         return {"status": "ok"}
-
+    # -----------------------------------------------------------
+    # Return the fully configured app instance
+    # -----------------------------------------------------------
     return app
