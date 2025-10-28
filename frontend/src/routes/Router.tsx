@@ -6,7 +6,7 @@ import ProtectedRoute from "./ProtectedRoute";
 import VerifyEmailSent from "../pages/VerifyEmailSent";
 import SetupProfile from "../pages/SetupProfile";
 import ForgotPassword from "../pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
+import ResetPassword from "../pages/ResetPassword";
 
 export default function Router() {
   return (

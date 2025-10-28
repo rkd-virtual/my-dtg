@@ -22,8 +22,8 @@ from ..utils import make_verify_token, load_verify_token, send_mail, generate_re
 # -----------------------------------------------------------
 # Initialize a Blueprint for authentication-related routes
 # -----------------------------------------------------------
-auth_bp = Blueprint("auth", __name__)
-
+auth_bp    = Blueprint("auth", __name__)
+profile_bp = Blueprint("profile", __name__)
 
 # -----------------------------------------------------------------------------
 # SIGNUP — creates a new user, saves to DB, and sends email verification link
@@ -324,7 +324,7 @@ def login():
         return jsonify(message="Please verify your email to continue"), 403
 
     # Create and send JWT token + cookie
-    token = create_access_token(identity=user.id)
+    token = create_access_token(identity=str(user.id))
     resp  = jsonify(token=token)
     set_access_cookies(resp, token)
     return resp, 200
@@ -526,6 +526,41 @@ def session_logout():
 @auth_bp.get("/me")
 @jwt_required()
 def me():
+    ident = get_jwt_identity()
+    try:
+        user_id = int(ident)
+    except (TypeError, ValueError):
+        # fallback if token is bad — force a logout from frontend if this happens
+        return jsonify(message="Invalid token identity"), 401
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(message="User not found"), 404
+
+    return jsonify(id=user.id, email=user.email, is_verified=user.is_verified)
+
+# -----------------------------------------------------------
+# Profile -  Detailed informations (JWT protected)
+# -----------------------------------------------------------
+@auth_bp.get("/profile")
+@jwt_required()
+def get_profile():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
-    return jsonify(id=user.id, email=user.email, is_verified=user.is_verified)
+
+    if not user:
+        return jsonify(message="User not found"), 404
+
+    profile = user.profile  # since you already defined `user.profile` relationship
+    if not profile:
+        return jsonify(message="Profile not found"), 404
+
+    return jsonify({
+        "id": user.id,
+        "email": user.email,
+        "first_name": profile.first_name,
+        "last_name": profile.last_name,
+        "job_title": profile.job_title,
+        "amazon_site": profile.amazon_site,
+        "other_accounts": profile.other_accounts,
+    })

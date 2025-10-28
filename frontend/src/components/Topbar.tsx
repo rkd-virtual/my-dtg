@@ -1,22 +1,27 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
-import { api } from "../lib/api";
+/* import { api } from "../lib/api"; */
+import useLogout from "../lib/useLogout";
+import { useToast } from "./ToastProvider";
 
 export default function Topbar() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const nav = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { logout, loading: logoutLoading } = useLogout();
+  const { showToast } = useToast();
+  /* const nav = useNavigate(); */
   const menuRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = async () => {
     try {
-      await api.post("/auth/session/logout");
-    } catch {
-      // ignore errors
-    } finally {
-      localStorage.removeItem("token");
-      nav("/login", { replace: true });
+      await logout();
+      showToast?.({ type: "success", text: "Signed out.", position: "top-right" });
+    } catch (err) {
+      // useLogout handles most errors; but show friendly notice if something odd occurs
+      console.error("Logout failed:", err);
+      showToast?.({ type: "error", text: "Could not sign out. Try again.", position: "top-right" });
     }
-  };
+  };;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -63,10 +68,13 @@ export default function Topbar() {
                 Settings
               </Link>
               <button
-                onClick={handleLogout}
+                onClick={async () => {
+                        setMobileOpen(false);
+                        await handleLogout();
+                      }}
                 className="block w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-amber-500 hover:text-black transition"
               >
-                Logout
+                {logoutLoading ? "Signing out…" : "Logout"}
               </button>
             </div>
           )}

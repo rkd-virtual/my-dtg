@@ -1,6 +1,9 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+// src/components/Navbar.tsx
+import { Link, NavLink } from "react-router-dom";
 import { useState } from "react";
-import { clearToken, getToken } from "../lib/auth";
+import { getToken } from "../lib/auth";
+import useLogout from "../lib/useLogout";
+import { useToast } from "./ToastProvider";
 
 /**
  * Configure your menus here
@@ -16,7 +19,7 @@ const NAV_ITEMS: Array<
       { label: "Manufacturing", to: "/industries/manufacturing" },
       { label: "Biopharma", to: "/industries/biopharma" },
       { label: "Hospitality", to: "/industries/hospitality" },
-      { label: "Healthcare", to: "/industries/healthcare" },      
+      { label: "Healthcare", to: "/industries/healthcare" },
     ],
   },
   {
@@ -45,19 +48,27 @@ const NAV_ITEMS: Array<
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null); // mobile submenu
-  const nav = useNavigate();
   const authed = !!getToken();
+  const { logout, loading: logoutLoading } = useLogout();
+  const { showToast } = useToast();
 
-  const handleLogout = () => {
-    clearToken();
-    nav("/login");
+  // wrapper so we can show a toast on error if needed
+  const handleLogout = async () => {
+    try {
+      await logout();
+      showToast?.({ type: "success", text: "Signed out.", position: "top-right" });
+    } catch (err) {
+      // useLogout handles most errors; but show friendly notice if something odd occurs
+      console.error("Logout failed:", err);
+      showToast?.({ type: "error", text: "Could not sign out. Try again.", position: "top-right" });
+    }
   };
 
   return (
     <header className="sticky top-0 z-40 bg-black text-white shadow">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         {/* Brand */}
-        <Link to="/dashboard" className="text-lg font-semibold tracking-tight">
+        <Link to="/portal/dashboard" className="text-lg font-semibold tracking-tight">
           DTG Portal
         </Link>
 
@@ -109,10 +120,7 @@ export default function Navbar() {
                 key={item.label}
                 to={item.to}
                 className={({ isActive }) =>
-                  [
-                    "text-sm font-medium hover:text-gray-200",
-                    isActive ? "text-amber-300" : "text-white",
-                  ].join(" ")
+                  ["text-md font-medium hover:text-gray-200", isActive ? "text-amber-300" : "text-white"].join(" ")
                 }
               >
                 {item.label}
@@ -120,8 +128,7 @@ export default function Navbar() {
             )
           )}
 
-          {/* Account menu (only when authenticated) */}
-          {/* 
+          {/* Account menu (desktop) */}
           {authed && (
             <div className="relative group">
               <button
@@ -130,25 +137,27 @@ export default function Navbar() {
                 aria-expanded="false"
                 title="Account"
               >
-              
-                <span>◉</span>
+                {/* you can replace with user's initial or avatar */}
+                <span>R</span>
               </button>
-              <div className="invisible absolute right-0 mt-2 w-40 rounded-xl border border-white/10 bg-neutral-900 p-2 opacity-0 shadow-lg ring-1 ring-white/10 transition-all group-hover:visible group-hover:opacity-100">
-                <Link
-                  to="/dashboard"
-                  className="block rounded-lg px-3 py-2 text-sm text-white/90 hover:bg-white/10"
-                >
+
+              <div className="invisible absolute right-0 mt-2 w-48 rounded-xl border border-white/10 bg-neutral-900 p-2 opacity-0 shadow-lg ring-1 ring-white/10 transition-all group-hover:visible group-hover:opacity-100">
+                <Link to="/portal/dashboard" className="block rounded-lg px-3 py-2 text-sm text-white/90 hover:bg-white/10">
                   Dashboard
+                </Link>
+                <Link to="/portal/settings" className="block rounded-lg px-3 py-2 text-sm text-white/90 hover:bg-white/10">
+                  Settings
                 </Link>
                 <button
                   onClick={handleLogout}
+                  disabled={logoutLoading}
                   className="block w-full rounded-lg px-3 py-2 text-left text-sm text-white/90 hover:bg-white/10"
                 >
-                  Logout
+                  {logoutLoading ? "Signing out…" : "Logout"}
                 </button>
               </div>
             </div>
-          )} */}
+          )}
         </nav>
 
         {/* Mobile hamburger */}
@@ -184,20 +193,15 @@ export default function Navbar() {
                 const hasSub = !!(item as any).submenu;
                 return (
                   <li key={item.label} className="py-1">
-                    {/* Top-level button/link */}
                     {hasSub ? (
                       <button
                         className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-white/10"
-                        onClick={() =>
-                          setExpanded((v) => (v === item.label ? null : item.label))
-                        }
+                        onClick={() => setExpanded((v) => (v === item.label ? null : item.label))}
                         aria-expanded={expanded === item.label}
                       >
                         <span>{item.label}</span>
                         <svg
-                          className={`h-4 w-4 transition-transform ${
-                            expanded === item.label ? "rotate-180" : ""
-                          }`}
+                          className={`h-4 w-4 transition-transform ${expanded === item.label ? "rotate-180" : ""}`}
                           viewBox="0 0 20 20"
                           fill="currentColor"
                         >
@@ -205,11 +209,7 @@ export default function Navbar() {
                         </svg>
                       </button>
                     ) : (
-                      <NavLink
-                        to={(item as any).to}
-                        className="block rounded-lg px-3 py-2 text-sm hover:bg-white/10"
-                        onClick={() => setMobileOpen(false)}
-                      >
+                      <NavLink to={(item as any).to} className="block rounded-lg px-3 py-2 text-sm hover:bg-white/10" onClick={() => setMobileOpen(false)}>
                         {item.label}
                       </NavLink>
                     )}
@@ -219,11 +219,7 @@ export default function Navbar() {
                       <ul className="mt-1 space-y-1 pl-3">
                         {(item as any).submenu.map((sub: any) => (
                           <li key={sub.to}>
-                            <NavLink
-                              to={sub.to}
-                              className="block rounded-lg px-3 py-2 text-sm text-white/90 hover:bg-white/10"
-                              onClick={() => setMobileOpen(false)}
-                            >
+                            <NavLink to={sub.to} className="block rounded-lg px-3 py-2 text-sm text-white/90 hover:bg-white/10" onClick={() => setMobileOpen(false)}>
                               {sub.label}
                             </NavLink>
                           </li>
@@ -237,27 +233,22 @@ export default function Navbar() {
               {/* Account group (mobile) */}
               {authed && (
                 <>
-                  <li className="mt-2 border-t border-white/10 pt-2 text-xs uppercase tracking-wide text-white/60">
-                    Account
-                  </li>
+                  <li className="mt-2 border-t border-white/10 pt-2 text-xs uppercase tracking-wide text-white/60">Account</li>
                   <li>
-                    <Link
-                      to="/dashboard"
-                      className="block rounded-lg px-3 py-2 text-sm hover:bg-white/10"
-                      onClick={() => setMobileOpen(false)}
-                    >
+                    <Link to="/portal/dashboard" className="block rounded-lg px-3 py-2 text-sm hover:bg-white/10" onClick={() => setMobileOpen(false)}>
                       Dashboard
                     </Link>
                   </li>
                   <li>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setMobileOpen(false);
-                        handleLogout();
+                        await handleLogout();
                       }}
                       className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
+                      disabled={logoutLoading}
                     >
-                      Logout
+                      {logoutLoading ? "Signing out…" : "Logout"}
                     </button>
                   </li>
                 </>

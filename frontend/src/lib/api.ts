@@ -17,7 +17,11 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       clearToken();
+      window.location.replace("/login");
     }
     return Promise.reject(err);
   }
 );
+
+
+export default api;
