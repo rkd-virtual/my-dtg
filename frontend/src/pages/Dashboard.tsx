@@ -292,39 +292,39 @@ export default function Dashboard() {
         </section>
 
         <section className="space-y-3">
-  <h2 className="text-lg font-semibold">
-    {displayAccountLabel} Open Quotes and Orders
-  </h2>
-  <p className="text-sm text-gray-600">
-    Your pending quotes and orders that have yet to be shipped.
-  </p>
+          <h2 className="text-lg font-semibold">
+            {displayAccountLabel} Open Quotes and Orders
+          </h2>
+          <p className="text-sm text-gray-600">
+            Your pending quotes and orders that have yet to be shipped.
+          </p>
 
-  <div className="grid gap-4 md:grid-cols-2">
-    {/* Open Quotes */}
-    <div
-      onClick={() => (window.location.href = "/portal/orders?tab=quotes")}
-      className="cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg rounded-xl"
-    >
-      <StatCard
-        title="Open Quotes"
-        value={openQuotes}
-        icon={<span>🧾</span>}
-      />
-    </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Open Quotes */}
+            <div
+              onClick={() => (window.location.href = "/portal/orders?tab=quotes")}
+              className="cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg rounded-xl"
+            >
+              <StatCard
+                title="Open Quotes"
+                value={openQuotes}
+                icon={<span>🧾</span>}
+              />
+            </div>
 
-    {/* Open Orders */}
-    <div
-      onClick={() => (window.location.href = "/portal/orders?tab=orders")}
-      className="cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg rounded-xl"
-    >
-      <StatCard
-        title="Open Orders"
-        value={openOrders}
-        icon={<span>📑</span>}
-      />
-    </div>
-  </div>
-</section>
+            {/* Open Orders */}
+            <div
+              onClick={() => (window.location.href = "/portal/orders?tab=orders")}
+              className="cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg rounded-xl"
+            >
+              <StatCard
+                title="Open Orders"
+                value={openOrders}
+                icon={<span>📑</span>}
+              />
+            </div>
+          </div>
+        </section>
 
       </div>
     </>
