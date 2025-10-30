@@ -40,10 +40,17 @@ def create_app():
     # Set up JWT authentication
     jwt.init_app(app)
 
+    cors_origins = app.config.get("CORS_ORIGINS", "")
+    if isinstance(cors_origins, str):
+        # allow comma-separated values in env variable
+        cors_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+
     cors.init_app(
-        app, 
-        resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", [])}}, 
-        supports_credentials=True
+        app,
+        resources={r"/api/*": {"origins": cors_origins or "*"}},
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     )
 
     # -----------------------------------------------------------

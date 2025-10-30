@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 const items = [
   { to: "/portal/dashboard", label: "Dashboard" },
@@ -11,6 +12,37 @@ const items = [
 ];
 
 export default function Sidebar() {
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const s = sessionStorage.getItem("selectedAccount");
+    if (s) setSelectedAccount(s);
+    const dn = sessionStorage.getItem("userDisplayName");
+    if (dn) setDisplayName(dn);
+
+    // listen for cross-tab storage changes
+    const storageHandler = (ev: StorageEvent) => {
+      if (ev.key === "selectedAccount") setSelectedAccount(ev.newValue);
+      if (ev.key === "userDisplayName") setDisplayName(ev.newValue);
+    };
+
+    // listen for local custom event (same-tab updates - dispatched by Dashboard)
+    const customHandler = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail;
+      if (detail?.selectedAccount) setSelectedAccount(detail.selectedAccount);
+      if (detail?.userDisplayName) setDisplayName(detail.userDisplayName);
+    };
+
+    window.addEventListener("storage", storageHandler);
+    window.addEventListener("dtg:account-changed", customHandler);
+
+    return () => {
+      window.removeEventListener("storage", storageHandler);
+      window.removeEventListener("dtg:account-changed", customHandler);
+    };
+  }, []);
+
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r bg-gray-900 text-white">
       <div className="h-16 flex items-center px-4 text-lg font-semibold border-b border-white/10">
@@ -38,8 +70,8 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-4 py-4 text-sm">
-        <div className="font-medium">Rupak Dutta</div>
-        <div className="text-gray-300">Amazon ABQ5</div>
+        <div className="font-medium">{displayName || "Rupak Dutta"}</div>
+        <div className="text-gray-300">{selectedAccount || "Amazon ABQ5"}</div>
       </div>
     </aside>
   );

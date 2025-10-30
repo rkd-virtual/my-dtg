@@ -237,7 +237,7 @@ export default function SetupProfile() {
                 }
               }}
               placeholder="Select Amazon Site..."
-              suggestionsBaseUrl={import.meta.env.VITE_SITES_API || "https://dtg-backend.onrender.com/sites"}
+              suggestionsBaseUrl={import.meta.env.VITE_SITES_AUTOCOMPLETE_API || "https://dtg-backend.onrender.com/sites"}
               disabled={inputsDisabled}
               minChars={1}
             />

@@ -9,6 +9,8 @@ export default function Topbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { logout, loading: logoutLoading } = useLogout();
   const { showToast } = useToast();
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   /* const nav = useNavigate(); */
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -25,13 +27,36 @@ export default function Topbar() {
 
   // Close dropdown on outside click
   useEffect(() => {
+    const s = sessionStorage.getItem("selectedAccount");
+    if (s) setSelectedAccount(s);
+    const dn = sessionStorage.getItem("userDisplayName");
+    if (dn) setDisplayName(dn);
+    // listen for cross-tab storage changes
+    const storageHandler = (ev: StorageEvent) => {
+      if (ev.key === "selectedAccount") setSelectedAccount(ev.newValue);
+      if (ev.key === "userDisplayName") setDisplayName(ev.newValue);
+    };
+    // listen for local custom event (same-tab updates - dispatched by Dashboard)
+    const customHandler = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail;
+      if (detail?.selectedAccount) setSelectedAccount(detail.selectedAccount);
+      if (detail?.userDisplayName) setDisplayName(detail.userDisplayName);
+    };
+
+    window.addEventListener("storage", storageHandler);
+    window.addEventListener("dtg:account-changed", customHandler);
+
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("storage", storageHandler);
+      window.removeEventListener("dtg:account-changed", customHandler);
+    } 
   }, []);
 
   return (
@@ -58,7 +83,7 @@ export default function Topbar() {
             <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-lg border border-gray-200 bg-[#111827] shadow-lg">
               <div className="px-4 py-2 text-sm text-gray-300 border-b border-gray-700">
                 Signed in as <br />
-                <span className="text-white font-medium">Rupak Dutta</span>
+                <span className="text-white font-medium">{displayName || "Rupak Dutta"}</span>
               </div>
               <Link
                 to="/settings"

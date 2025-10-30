@@ -1,13 +1,14 @@
 # -----------------------------------------------------------
 # Import all necessary Flask and extension libraries
 # -----------------------------------------------------------
-from flask import Blueprint, request, jsonify, make_response
+from flask import Blueprint, request, jsonify, make_response, current_app
 from flask_jwt_extended import (
     create_access_token, jwt_required, get_jwt_identity,
     set_access_cookies, unset_jwt_cookies
 )
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
+from sqlalchemy.exc import SQLAlchemyError
 import os, json
 
 
@@ -15,9 +16,22 @@ import os, json
 # Import app-specific modules for database and helpers
 # -----------------------------------------------------------
 from ..extensions import db
-from ..models import User, UserProfile
+from ..models import User, UserProfile, UserSite
 from ..utils import make_verify_token, load_verify_token, send_mail, generate_reset_code
 
+# Helper: ensure value becomes a list of non-empty strings
+def listify(v):
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(x).strip() for x in v if str(x).strip()]
+    s = str(v).strip()
+    if not s:
+        return []
+    # if comma separated, split; otherwise single element list
+    if "," in s:
+        return [x.strip() for x in s.split(",") if x.strip()]
+    return [s]
 
 # -----------------------------------------------------------
 # Initialize a Blueprint for authentication-related routes
@@ -47,7 +61,7 @@ def signup():
     db.session.add(user)
     db.session.flush()
 
-    db.session.add(UserProfile(user_id=user.id))
+    db.session.add(UserProfile(user_id=user.id, other_accounts=[]))
     db.session.commit()
 
     token = make_verify_token(user.id)
@@ -252,14 +266,29 @@ def verify_email():
 # -----------------------------------------------------------
 @auth_bp.put("/setup-profile")
 def setup_profile():
-    data = request.get_json(silent=True) or {}
-    token = data.get("token") or ""
+    """
+    Robust setup-profile handler (developer-friendly).
+    Accepts:
+      - token (required)
+      - first_name, last_name, job_title (optional)
+      - amazon_site: can be "CTZ", "Amazon CTZ", ["CTZ"], ["Amazon CTZ"], "CTZ,RYT", '["Amazon CTZ"]', etc.
+      - other_accounts: similar flexible shapes
 
-    # Verify token and get user id
+    Normalizes amazon_site -> list of strings, each prefixed with "Amazon " if necessary,
+    stores into UserProfile.amazon_site (ARRAY) and also syncs rows into user_sites
+    (site_slug, label, is_default) before committing.
+    """
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    if not token:
+        return jsonify(message="token is required"), 400
+
+    # decode token -> uid
     try:
         payload = load_verify_token(token)
-        uid = int(payload["uid"])
-    except Exception:
+        uid = int(payload.get("uid"))
+    except Exception as e:
+        current_app.logger.exception("Failed to decode setup token")
         return jsonify(message="Invalid or expired link"), 400
 
     user = User.query.get(uid)
@@ -268,33 +297,193 @@ def setup_profile():
     if not user.is_verified:
         return jsonify(message="Please verify your email first"), 403
 
-    # Load or create the profile record
-    profile = UserProfile.query.filter_by(user_id=uid).first() or UserProfile(user_id=uid)
-
-    # Helper to sanitize string fields
+    # helper sanitizer
     def s(v, n=255):
-        if v is None: return None
+        if v is None:
+            return None
         v = str(v).strip()
-        return v[:n]
+        return v[:n] if v else None
 
-    # Helper to convert comma-separated string → list of strings
+    # flexible list parser
     def listify(v):
-        if v is None: return []
+        if v is None:
+            return []
         if isinstance(v, list):
             return [s(x) for x in v if s(x)]
-        return [s(x) for x in str(v).split(",") if s(x)]
+        if isinstance(v, str):
+            txt = v.strip()
+            # try JSON parse first (handles JSON arrays)
+            if (txt.startswith("[") and txt.endswith("]")) or (txt.startswith("{") and txt.endswith("}")):
+                try:
+                    parsed = json.loads(txt)
+                    if isinstance(parsed, list):
+                        return [s(x) for x in parsed if s(x)]
+                    # if parsed is string or dict, fall-through to CSV handling
+                except Exception:
+                    # continue to CSV fallback
+                    pass
+            # CSV fallback
+            if "," in txt:
+                return [s(x) for x in txt.split(",") if s(x)]
+            # single token
+            return [s(txt)] if s(txt) else []
+        # fallback: cast to string
+        try:
+            return [s(str(v))]
+        except Exception:
+            return []
 
-    # Save all profile fields
-    profile.first_name      = s(data.get("first_name"))
-    profile.last_name       = s(data.get("last_name"))
-    profile.job_title       = s(data.get("job_title"))
-    profile.amazon_site     = s(data.get("amazon_site"))
-    profile.other_accounts  = listify(data.get("other_accounts"))
+    try:
+        # Load or create the profile; ensure arrays are initialized to avoid NOT NULL DB errors
+        profile = UserProfile.query.filter_by(user_id=uid).first()
+        if not profile:
+            profile = UserProfile(user_id=uid, amazon_site=[], other_accounts=[])
+            db.session.add(profile)
+            # flush to ensure DB constraints applied early
+            db.session.flush()
 
-    db.session.add(profile)
-    user.profile_completed_at = datetime.now(timezone.utc)
-    db.session.commit()
-    return jsonify(message="Profile saved. Please log in."), 200
+        # Save simple fields
+        profile.first_name = s(data.get("first_name")) or profile.first_name
+        profile.last_name = s(data.get("last_name")) or profile.last_name
+        profile.job_title = s(data.get("job_title")) or profile.job_title
+
+        # amazon_site: normalize into full labels "Amazon <CODE>" and store as list (ARRAY)
+        raw_site = data.get("amazon_site")
+        site_items = listify(raw_site)  # ["CTZ"] or ["Amazon CTZ"] or []
+        normalized_sites = []
+        for item in site_items:
+            if not item:
+                continue
+            # if user passed "Amazon CTZ" or "amazon CTZ" keep it
+            if item.lower().startswith("amazon"):
+                normalized_sites.append(item.strip())
+            else:
+                # item could be the code "CTZ"
+                normalized_sites.append(f"Amazon {item.strip()}")
+
+        # If setup-profile flow sent a single string "Amazon CTZ" we still handle above.
+        if normalized_sites:
+            profile.amazon_site = normalized_sites
+        else:
+            # keep existing profile.amazon_site or set empty list to satisfy NOT NULL
+            if not getattr(profile, "amazon_site", None):
+                profile.amazon_site = []
+
+        # other_accounts -> always an array
+        other_items = listify(data.get("other_accounts"))
+        if other_items:
+            profile.other_accounts = other_items
+        else:
+            if not getattr(profile, "other_accounts", None):
+                profile.other_accounts = []
+
+        # mark profile completed timestamp
+        user.profile_completed_at = datetime.now(timezone.utc)
+
+        db.session.add(profile)
+        db.session.add(user)
+
+        # -----------------------------
+        # Sync user_sites table from profile.amazon_site
+        # -----------------------------
+        # This ensures for each "Amazon CODE" in profile.amazon_site there is a user_sites row:
+        #   site_slug = CODE, label = "Amazon CODE", is_default = True for first item
+        # It updates existing rows or inserts new ones. It also clears previous defaults.
+        from sqlalchemy import text
+
+        try:
+            normalized_sites = getattr(profile, "amazon_site", []) or []
+            # trim + dedupe preserving order
+            cleaned = []
+            seen = set()
+            for v in normalized_sites:
+                if not v:
+                    continue
+                t = v.strip()
+                if not t or t in seen:
+                    continue
+                seen.add(t)
+                cleaned.append(t)
+            normalized_sites = cleaned
+
+            # fetch existing site_slugs for this user
+            existing_rows = db.session.execute(
+                text("SELECT id, site_slug FROM user_sites WHERE user_id = :uid"),
+                {"uid": uid}
+            ).fetchall()
+            existing_slugs = {r[1] for r in existing_rows if r[1] is not None}
+
+            # clear existing defaults (we will set exactly one default)
+            db.session.execute(text("UPDATE user_sites SET is_default = false WHERE user_id = :uid"), {"uid": uid})
+
+            for i, full_label in enumerate(normalized_sites):
+                # derive slug (last whitespace-delimited token)
+                parts = full_label.strip().split()
+                if not parts:
+                    continue
+                slug = parts[-1]
+                is_default = (i == 0)  # first becomes default
+
+                if slug in existing_slugs:
+                    # update label and default flag
+                    db.session.execute(
+                        text("""
+                            UPDATE user_sites
+                            SET label = :label, is_default = :is_default
+                            WHERE user_id = :uid AND site_slug = :slug
+                        """),
+                        {"label": full_label, "is_default": is_default, "uid": uid, "slug": slug}
+                    )
+                else:
+                    # insert new site row
+                    db.session.execute(
+                        text("""
+                            INSERT INTO user_sites (user_id, site_slug, label, is_default, created_at)
+                            VALUES (:uid, :slug, :label, :is_default, now())
+                        """),
+                        {"uid": uid, "slug": slug, "label": full_label, "is_default": is_default}
+                    )
+        except Exception:
+            current_app.logger.exception("Failed to sync user_sites for user %s", uid)
+            # Don't raise; profile should still be saved.
+
+        # -----------------------------
+        # commit final transaction
+        # -----------------------------
+        db.session.commit()
+
+        return jsonify(
+            message="Profile saved. Please log in.",
+            profile={
+                "id": user.id,
+                "email": user.email,
+                "first_name": profile.first_name,
+                "last_name": profile.last_name,
+                "job_title": profile.job_title,
+                "amazon_site": profile.amazon_site,
+                "other_accounts": profile.other_accounts,
+            },
+        ), 200
+
+    except SQLAlchemyError as e:
+        current_app.logger.exception("Database error saving setup_profile")
+        db.session.rollback()
+        # In dev return error message for faster debugging (remove in prod)
+        if current_app.config.get("ENV") == "development" or current_app.config.get("DEBUG"):
+            return jsonify(message="Database error", detail=str(e.__dict__.get("orig"))), 500
+        return jsonify(message="Database error saving profile"), 500
+
+    except Exception as e:
+        current_app.logger.exception("Unexpected error saving setup_profile")
+        db.session.rollback()
+        if current_app.config.get("ENV") == "development" or current_app.config.get("DEBUG"):
+            # return traceback in development to aid debugging
+            import traceback
+            tb = traceback.format_exc()
+            return jsonify(message="Unexpected error", detail=str(e), traceback=tb), 500
+        return jsonify(message="Unexpected error"), 500
+
+
 
 # --------------------------------------------------------------
 # LOGIN — authenticates user and issues JWT (also sets cookie)
@@ -551,9 +740,20 @@ def get_profile():
     if not user:
         return jsonify(message="User not found"), 404
 
-    profile = user.profile  # since you already defined `user.profile` relationship
+    profile = user.profile
     if not profile:
         return jsonify(message="Profile not found"), 404
+
+    # Find default site from UserSite (normalized). Fallback to first site or empty string.
+    default_site = None
+    default_site_obj = user.sites.filter_by(is_default=True).first()
+    if not default_site_obj:
+        default_site_obj = user.sites.order_by(UserSite.created_at.desc()).first()
+
+    if default_site_obj:
+        default_site = default_site_obj.label or f"Amazon {default_site_obj.site_slug}"
+    else:
+        default_site = None
 
     return jsonify({
         "id": user.id,
@@ -561,6 +761,164 @@ def get_profile():
         "first_name": profile.first_name,
         "last_name": profile.last_name,
         "job_title": profile.job_title,
-        "amazon_site": profile.amazon_site,
+        "amazon_site": default_site,                 
         "other_accounts": profile.other_accounts,
     })
+
+# -----------------------------------------------------------
+# Profile -  update action
+# -----------------------------------------------------------
+@auth_bp.put("/profile")
+@jwt_required()
+def update_profile():
+    """
+    PUT /auth/profile
+    Body: { "amazon_site": "CTZ" }   # frontend sends site code (like DEN2/CTZ)
+    Updates UserSite to mark the given site as default (is_default=True)
+    and unsets all others (is_default=False).
+    """
+    data = request.get_json(silent=True) or {}
+    amazon_site_code = data.get("amazon_site")
+
+    if amazon_site_code is None:
+        return jsonify(message="amazon_site is required"), 400
+
+    def s(v, n=255):
+        if v is None:
+            return None
+        v = str(v).strip()
+        return v[:n]
+
+    # Resolve current user id from JWT identity
+    ident = get_jwt_identity()
+    try:
+        user_id = int(ident)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid token identity"), 401
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(message="User not found"), 404
+
+    # sanitize site code and build label
+    site_code = s(amazon_site_code)
+    if not site_code:
+        return jsonify(message="Invalid amazon_site value"), 400
+
+    # ensure no "Amazon " prefix duplication
+    if site_code.lower().startswith("amazon"):
+        # user may have sent "Amazon CTZ" — extract last token as code
+        site_code = site_code.split()[-1]
+
+    full_label = f"Amazon {site_code}"
+
+    try:
+        # use a nested transaction to avoid "transaction already begun" error
+        with db.session.begin_nested():
+            # Unset previous defaults
+            UserSite.query.filter_by(user_id=user.id, is_default=True).update({"is_default": False})
+
+            # Find or create the selected site
+            site = UserSite.query.filter_by(user_id=user.id, site_slug=site_code).first()
+            if site:
+                site.label = full_label
+                site.is_default = True
+                db.session.add(site)
+            else:
+                site = UserSite(
+                    user_id=user.id,
+                    site_slug=site_code,
+                    label=full_label,
+                    is_default=True,
+                    created_at=datetime.now(timezone.utc)
+                )
+                db.session.add(site)
+
+        db.session.commit()
+
+    except SQLAlchemyError:
+        current_app.logger.exception("DB error while updating default site")
+        db.session.rollback()
+        return jsonify(message="Database error updating profile"), 500
+    except Exception:
+        current_app.logger.exception("Unexpected error while updating profile")
+        db.session.rollback()
+        return jsonify(message="Unexpected error"), 500
+
+    # Optional: call third-party API to refresh related data
+    api_data = None
+    api_base = current_app.config.get("AMAZON_SITE_API_URL")
+    if api_base:
+        try:
+            import requests
+            resp = requests.get(
+                f"{api_base.rstrip('/')}/api/dashboard",
+                params={"site_code": site_code},
+                timeout=8
+            )
+            if resp.ok:
+                try:
+                    api_data = resp.json()
+                except Exception:
+                    api_data = {"status": "ok"}
+        except Exception:
+            current_app.logger.exception("Error calling third-party API")
+
+    out = {
+        "message": "Profile updated successfully",
+        "profile": {
+            "id": user.id,
+            "email": user.email,
+            "amazon_site": full_label,
+        },
+    }
+    if api_data is not None:
+        out["dashboard_data"] = api_data
+
+    return jsonify(out), 200
+
+# ----------------------------------------------------------------------
+# Add this route to auth.py (place near get_profile / update_profile)
+# ----------------------------------------------------------------------
+@auth_bp.get("/profile/sites")
+@jwt_required()
+def get_profile_sites():
+    """
+    Return the list of user_sites rows for the current user.
+    Response: [{ id, user_id, site_slug, label, is_default, created_at }, ...]
+    """
+    ident = get_jwt_identity()
+    try:
+        user_id = int(ident)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid token identity"), 401
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify(message="User not found"), 404
+
+    # load sites via relationship (or query UserSite directly)
+    try:
+        rows = user.sites.order_by(UserSite.id.asc()).all()
+    except Exception:
+        # fallback query if relationship doesn't support order_by
+        rows = UserSite.query.filter_by(user_id=user.id).order_by(UserSite.id.asc()).all()
+
+    result = []
+    for r in rows:
+        created = None
+        if getattr(r, "created_at", None):
+            try:
+                created = r.created_at.isoformat()
+            except Exception:
+                created = str(r.created_at)
+        result.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "site_slug": r.site_slug,
+            "label": r.label,
+            "is_default": bool(r.is_default),
+            "created_at": created,
+        })
+
+    return jsonify(result), 200

@@ -1,3 +1,5 @@
+# app/models.py
+
 # --------------------------------------------------------------
 # Standard libs and helpers for timestamps and password hashing
 # --------------------------------------------------------------
@@ -11,18 +13,12 @@ from .extensions import db
 
 # -----------------------------------------------------------
 # Postgres-specific column type for text arrays (ARRAY)
-# For other db like MYSQL/SQlite 
-# [from sqlalchemy import JSON]
-# other_accounts = db.Column(JSON, nullable=False, server_default="[]")
 # -----------------------------------------------------------
 from sqlalchemy.dialects.postgresql import ARRAY
-
+from sqlalchemy import text, func
 
 # -------------------------------------------------------------------
 # User: stores login credentials and verification status
-# @email : Unique, indexed email used for login
-# @password_hash : Hashed password (never store raw passwords)
-# Timestamps (UTC now by default; updated_at auto-updates on change)
 # -------------------------------------------------------------------
 class User(db.Model):
     __tablename__ = "users"
@@ -52,6 +48,9 @@ class User(db.Model):
                     uselist=False, 
                     cascade="all, delete-orphan"
                 )
+
+    # 1:n relationship to UserSite (normalized sites)
+    sites = db.relationship("UserSite", back_populates="user", cascade="all, delete-orphan", lazy="dynamic")
     
     # Helper to hash and set the user's password
     def set_password(self, password: str):
@@ -63,7 +62,6 @@ class User(db.Model):
 
 # -------------------------------------------------------------------------
 # UserProfile: stores extended profile fields for a user (1:1)
-# @user_id   : Link to users.id (unique=True enforces one profile per user)
 # -------------------------------------------------------------------------
 class UserProfile(db.Model):
     __tablename__ = "user_profiles"
@@ -74,23 +72,50 @@ class UserProfile(db.Model):
     first_name   = db.Column(db.String(255))
     last_name    = db.Column(db.String(255))
     job_title    = db.Column(db.String(255))
-    amazon_site  = db.Column(db.String(255))
 
-    # Postgres text[] column to store multiple other account IDs/usernames
-    # server_default="{}" initializes as an empty array at DB level
-    other_accounts = db.Column(ARRAY(db.String), server_default="{}", nullable=False)
+    # Keep other_accounts as a Postgres text[] with safe defaults
+    other_accounts = db.Column(
+        ARRAY(db.String),
+        server_default=text("'{}'"),
+        nullable=False,
+        default=list
+    )
 
     # Back-reference to User (completes the 1:1 link)
     user = db.relationship("User", back_populates="profile")
 
 
-
-""" class PasswordReset(db.Model):
-    __tablename__ = "password_resets"
+# -------------------------------------------------------------------------
+# UserSite: normalized table for user's sites (one row per site)
+# - site_slug: short code (e.g. "DEN2")
+# - label: human friendly label (e.g. "Amazon DEN2")
+# - is_default: boolean flag indicating which site is the active/default
+# -------------------------------------------------------------------------
+class UserSite(db.Model):
+    __tablename__ = "user_sites"
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), nullable=False, index=True)
-    code = db.Column(db.String(64), nullable=False, unique=True, index=True)
-    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    def __repr__(self):
-        return f"<PasswordReset {self.email} {self.code}>" """
+    # canonical short code for the site (no spaces ideally)
+    site_slug = db.Column(db.String(100), nullable=False)
+
+    # human friendly label shown in UI
+    label = db.Column(db.String(255), nullable=True)
+
+    # single boolean to mark default/active site for the user
+    is_default = db.Column(db.Boolean, nullable=False, server_default="false", default=False)
+
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # relationship back to user
+    user = db.relationship("User", back_populates="sites")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "site_slug": self.site_slug,
+            "label": self.label,
+            "is_default": bool(self.is_default),
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
