@@ -12,26 +12,44 @@ const items = [
 ];
 
 export default function Sidebar() {
-  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState<string | null>(null);
+  // initialize from sessionStorage synchronously so UI is correct on first render
+  const initialSelected = sessionStorage.getItem("selectedAccount") || null;
+  const initialDisplayName = sessionStorage.getItem("userDisplayName") || null;
+
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(initialSelected);
+  const [displayName, setDisplayName] = useState<string | null>(initialDisplayName);
 
   useEffect(() => {
-    const s = sessionStorage.getItem("selectedAccount");
-    if (s) setSelectedAccount(s);
-    const dn = sessionStorage.getItem("userDisplayName");
-    if (dn) setDisplayName(dn);
-
-    // listen for cross-tab storage changes
+    // storage event handles cross-tab changes automatically
     const storageHandler = (ev: StorageEvent) => {
-      if (ev.key === "selectedAccount") setSelectedAccount(ev.newValue);
-      if (ev.key === "userDisplayName") setDisplayName(ev.newValue);
+      if (ev.key === "selectedAccount") {
+        setSelectedAccount(ev.newValue);
+      }
+      if (ev.key === "userDisplayName") {
+        setDisplayName(ev.newValue);
+      }
     };
 
-    // listen for local custom event (same-tab updates - dispatched by Dashboard)
+    // same-tab updates: Dashboard dispatches dtg:account-changed with { selectedAccount, userDisplayName }
     const customHandler = (ev: Event) => {
-      const detail = (ev as CustomEvent).detail;
-      if (detail?.selectedAccount) setSelectedAccount(detail.selectedAccount);
-      if (detail?.userDisplayName) setDisplayName(detail.userDisplayName);
+      const detail = (ev as CustomEvent)?.detail;
+      if (detail?.selectedAccount) {
+        setSelectedAccount(detail.selectedAccount);
+        // also mirror to sessionStorage just in case
+        try { sessionStorage.setItem("selectedAccount", detail.selectedAccount); } catch {}
+      } else {
+        // fallback: read from sessionStorage if detail missing
+        const fromStore = sessionStorage.getItem("selectedAccount");
+        if (fromStore) setSelectedAccount(fromStore);
+      }
+
+      if (detail?.userDisplayName) {
+        setDisplayName(detail.userDisplayName);
+        try { sessionStorage.setItem("userDisplayName", detail.userDisplayName); } catch {}
+      } else {
+        const fromStore = sessionStorage.getItem("userDisplayName");
+        if (fromStore) setDisplayName(fromStore);
+      }
     };
 
     window.addEventListener("storage", storageHandler);
