@@ -62,7 +62,7 @@ export default function Topbar() {
   return (
     <header className="relative z-20 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4">
       <div className="flex items-center gap-3">
-        <span className="text-lg font-semibold text-gray-800">DTG Portal</span>
+        <span className="text-lg font-semibold text-gray-800"></span>
       </div>
 
       <div className="flex items-center gap-4">
@@ -83,7 +83,7 @@ export default function Topbar() {
             <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-lg border border-gray-200 bg-[#111827] shadow-lg">
               <div className="px-4 py-2 text-sm text-gray-300 border-b border-gray-700">
                 Signed in as <br />
-                <span className="text-white font-medium">{displayName || "Rupak Dutta"}</span>
+                <span className="text-white font-medium">{displayName || "John Doe"}</span>
               </div>
               <Link
                 to="/settings"

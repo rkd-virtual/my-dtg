@@ -23,7 +23,7 @@ export default function AccountSelector({
   value,
   onChange,
   label = "Select an Account:",
-  selectClassName = "rounded-lg border px-3 py-2 text-sm",
+  selectClassName = "rounded-lg border px-7 py-2 text-sm",
 }: Props) {
   // Build option labels: prefer sites[].label, else accounts[]
   const siteLabels: string[] = Array.isArray(sites) && sites.length > 0

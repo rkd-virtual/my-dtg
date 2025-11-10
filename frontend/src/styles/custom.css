@@ -13,3 +13,15 @@
   font-size: 12px;
   font-weight: bold;
 }
+.sidebar1_logo {
+    max-width: 30%;
+}
+.bg-gray-900 {  
+  background-color: #222222;
+}
+.left-menu-font-size {
+  font-size: 15px;
+}
+.inp-gap{
+  padding-top: 50px;
+}

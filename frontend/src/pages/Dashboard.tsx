@@ -18,6 +18,16 @@ type DashboardPayload = {
   part_3?: any;
 };
 
+type Product = {
+  id: string;
+  sku: string;
+  title: string;
+  price: number;
+  short: string;
+  img?: string;
+  requiresPart?: string | null; // show warning row if present
+};
+
 export default function Dashboard() {
   const { showToast } = useToast();
 
@@ -28,14 +38,8 @@ export default function Dashboard() {
   const [name, setName] = useState("User");
   const [jobTitle, setJobTitle] = useState<string | undefined>("");
 
-  // Preferred source: user_sites rows
   const [sites, setSites] = useState<UserSite[] | null>(null);
-
-  // Only used when user_sites endpoint is not available.
-  // NOTE: we will not merge other_accounts here (per your request).
   const [accounts, setAccounts] = useState<string[]>([]);
-
-  // selected account label (either site.label or "Amazon CTZ" style)
   const [account, setAccount] = useState<string>(() => sessionStorage.getItem("selectedAccount") || "");
 
   const [dashboardData, setDashboardData] = useState<DashboardPayload | null>(null);
@@ -45,7 +49,64 @@ export default function Dashboard() {
   const SITES_API_BASE = (import.meta.env.VITE_SITES_API || "").replace(/\/+$/, "");
 
   // -------------------------
-  // Helpers
+  // Static product list (match screenshot)
+  // -------------------------
+  const products: Product[] = [
+    {
+      id: "p1",
+      sku: "DTG-PS-001-16DTG",
+      title: "CART.PS",
+      price: 2183.0,
+      short:
+        'CART.PS - DTG Problem Solver Cart, 18" Adjustable Height Work Surface, Incl. DTG UPS X300 Controller, Large Bottom Shelf.',
+      img: "https://cdn.prod.website-files.com/66311aaf0b687a3a2e1a0550/68960701dacfc3160c1d43df_DTG-IP-LP-1XB-C0%20-%20PS%20cart%20neal.png",
+    },
+    {
+      id: "p2",
+      sku: "DTG-PWMRTR",
+      title: "Fuel Gauge",
+      price: 225.0,
+      short: "Battery Power Meter (Fuel) Gauge. Ethernet Cable Not Included.",
+      img: "https://cdn.prod.website-files.com/66311aaf0b687a3a2e1a0550/6894fa537b9446c35cd24ac0_Adobe%20Express%20-%20file%20(2).png",
+      requiresPart: "C6ASPAT6BK",
+    },
+    {
+      id: "p3",
+      sku: "DTG-P2-NA-XP-S0",
+      title: "MPower X300 Battery",
+      price: 735.0,
+      short: "Definitive Battery (Gray) MPower X300 LFP Swappable Battery.",
+      img: "https://cdn.prod.website-files.com/66311aaf0b687a3a2e1a0550/6894e0973c0f2f5ae078b70e_Adobe%20Express%20-%20file%20(2).png",
+    },
+    {
+      id: "p4",
+      sku: "DTG-PI-NA-3XP-S0",
+      title: "Tri-Bay Charger",
+      price: 995.0,
+      short:
+        "CART.PS.CHRG.LIFE – DTG MPower X300 Tri-Bay Charger - POGO Connector. Charges up to 3 DTG X250 & X300 Batteries within 2-hours.",
+      img: "https://cdn.prod.website-files.com/66311aaf0b687a3a2e1a0550/68960dde1b90c0089a7959ec_Adobe%20Express%20-%20file%20(8).png",
+    },
+  ];
+
+  // quantity state per product
+  const [quantities, setQuantities] = useState<Record<string, number>>(
+    () => Object.fromEntries(products.map((p) => [p.id, 1]))
+  );
+
+  const setQuantity = (id: string, value: number) => {
+    setQuantities((s) => ({ ...s, [id]: Math.max(1, Math.floor(value || 1)) }));
+  };
+
+  const handleAddToQuote = (product: Product) => {
+    const qty = quantities[product.id] ?? 1;
+    // replace with real add-to-quote logic when ready
+    showToast({ type: "success", text: `${product.title} (x${qty}) added to quote.` });
+    console.log("Add to quote:", product, qty);
+  };
+
+  // -------------------------
+  // Helpers (unchanged)
   // -------------------------
   const extractSiteCode = (label?: string | null) => {
     if (!label) return "";
@@ -73,22 +134,17 @@ export default function Dashboard() {
     }
   };
 
-  // NEW: fetch user_sites rows from backend
   const fetchUserSites = async (): Promise<UserSite[] | null> => {
     try {
       const { data } = await api.get<UserSite[]>("/auth/profile/sites");
       if (Array.isArray(data)) return data;
       return null;
     } catch (err) {
-      // endpoint might not exist yet — return null so we fall back gracefully
       console.warn("GET /profile/sites failed:", err);
       return null;
     }
   };
 
-  // -------------------------
-  // Load dashboard payload from third-party
-  // -------------------------
   const loadDashboardForSite = async (siteCode: string) => {
     if (!siteCode) {
       console.warn("No siteCode provided to loadDashboardForSite");
@@ -150,11 +206,10 @@ export default function Dashboard() {
 
       const me = await fetchMe();
       const profile = await fetchProfile();
-      const userSites = await fetchUserSites(); // preferred source for dropdown
+      const userSites = await fetchUserSites();
 
       if (!mounted) return;
 
-      // display name
       if (profile) {
         const f = profile.first_name || "";
         const l = profile.last_name || "";
@@ -169,10 +224,8 @@ export default function Dashboard() {
         setJobTitle(undefined);
       }
 
-      // If userSites present -> use them ONLY (do not merge with other_accounts)
       if (userSites && userSites.length > 0) {
         setSites(userSites);
-        // clear any fallback accounts — they are irrelevant when user_sites exist
         setAccounts([]);
 
         const defaultSite = userSites.find((s) => s.is_default) ?? userSites[0];
@@ -180,14 +233,10 @@ export default function Dashboard() {
         setAccount(label);
         sessionStorage.setItem("selectedAccount", label);
 
-        // load dashboard by slug (site_slug)
         await loadDashboardForSite(defaultSite.site_slug);
       } else {
-        // FALLBACK: user_sites not available (endpoint missing or empty)
-        // Use only profile.amazon_site (single value). Do NOT merge other_accounts into dropdown.
         const fallbackLabel = (profile?.amazon_site || "").trim() || "Amazon ABQ5";
         setAccounts([fallbackLabel]);
-        // ensure sites is explicitly null so AccountSelector chooses accounts path
         setSites(null);
 
         const stored = sessionStorage.getItem("selectedAccount");
@@ -220,29 +269,24 @@ export default function Dashboard() {
     sessionStorage.setItem("selectedAccount", newAccount);
     window.dispatchEvent(new CustomEvent("dtg:account-changed", { detail: { selectedAccount: newAccount } }));
 
-    // Determine site code to call backend+third-party
     let siteCode = extractSiteCode(newAccount);
 
     if (sites && sites.length > 0) {
       const match = sites.find((s) => s.label === newAccount);
       if (match) siteCode = match.site_slug;
-      // if no match by label, fallback to extracted code above
     }
 
     if (!siteCode) return;
 
     setSavingSite(true);
     try {
-      // Update server-side default site (PUT /auth/profile expects code like "CTZ")
       await api.put("/auth/profile", { amazon_site: siteCode });
 
-      // If sites endpoint exists, refresh sites list (to reflect is_default change)
       const refreshed = await fetchUserSites();
       if (refreshed) {
         setSites(refreshed);
       }
 
-      // Load third-party dashboard for the selected siteCode
       await loadDashboardForSite(siteCode);
 
       showToast({ type: "success", text: `Site switched to Amazon ${siteCode}` });
@@ -261,7 +305,6 @@ export default function Dashboard() {
 
   return (
     <>
-      {/* overlay loader while saving site */}
       {savingSite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="rounded-md bg-white px-6 py-5 shadow-lg flex items-center gap-4">
@@ -282,50 +325,97 @@ export default function Dashboard() {
           <p className="text-gray-600">{jobTitle ? `${jobTitle}, ${displayAccountLabel}` : `DEV, ${displayAccountLabel}`}</p>
         </section>
 
-        <section className="rounded-xl border bg-white p-4">
-          <AccountSelector
-            sites={sites}
-            accounts={accounts}
-            value={account}
-            onChange={onAccountChange}
-          />
+        <section className="rounded-xl border bg-white max-w-sm p-4">
+          <AccountSelector sites={sites} accounts={accounts} value={account} onChange={onAccountChange} />
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">
-            {displayAccountLabel} Open Quotes and Orders
-          </h2>
-          <p className="text-sm text-gray-600">
-            Your pending quotes and orders that have yet to be shipped.
-          </p>
+          <h2 className="text-lg font-semibold">{displayAccountLabel} Open Quotes and Orders</h2>
+          <p className="text-sm text-gray-600">📦Your pending quotes and orders that have yet to be shipped.</p>
 
           <div className="grid gap-4 md:grid-cols-2">
-            {/* Open Quotes */}
             <div
               onClick={() => (window.location.href = "/portal/orders?tab=quotes")}
               className="cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg rounded-xl"
             >
-              <StatCard
-                title="Open Quotes"
-                value={openQuotes}
-                icon={<span>🧾</span>}
-              />
+              <StatCard title="Open Quotes" value={openQuotes} icon={<span>🧾</span>} />
             </div>
 
-            {/* Open Orders */}
             <div
               onClick={() => (window.location.href = "/portal/orders?tab=orders")}
               className="cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg rounded-xl"
             >
-              <StatCard
-                title="Open Orders"
-                value={openOrders}
-                icon={<span>📑</span>}
-              />
+              <StatCard title="Open Orders" value={openOrders} icon={<span>📦</span>} />
             </div>
           </div>
         </section>
 
+        {/* Shop Popular Items */}
+        <section className="pt-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold">Shop Popular Items</h2>
+            <button onClick={() => (window.location.href = "/portal/shop")} className="border rounded px-3 py-2 text-sm">
+              Shop Parts Catalog
+            </button>
+          </div>
+
+          <div className="mt-6 grid gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
+            {products.map((p) => (
+              <div
+                key={p.id}
+                className="bg-white rounded shadow-sm hover:shadow-md transition transform hover:-translate-y-1 overflow-hidden"
+              >
+                <div className="relative bg-gray-50">
+                  <img src={p.img} alt={p.title} className="w-full h-56 object-contain bg-white p-6" />
+                  <div className="absolute left-3 top-3 rounded-md bg-gray-200 text-xs text-gray-800 px-2 py-1">
+                    {p.sku}
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  <div className="text-xl font-bold mb-1">${p.price.toFixed(2)}</div>
+                  <div className="font-semibold mb-1">{p.title}</div>
+
+                  <div className="text-sm text-gray-600 mb-3">{p.short}</div>
+
+                  {p.requiresPart && (
+                    <div className="flex items-center gap-2 text-sm text-amber-600 mb-3">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 8v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="0" />
+                      </svg>
+                      <div className="text-gray-800">Requires Part: <span className="font-medium text-gray-900">{p.requiresPart}</span></div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-4 inp-gap">
+                    <input
+                      type="number"
+                      min={1}
+                      value={quantities[p.id] ?? 1}
+                      onChange={(e) => setQuantity(p.id, Number(e.target.value))}
+                      className="w-20 rounded border border-gray-300 px-2 py-1 text-sm"
+                    />
+
+                    <button
+                      onClick={() => handleAddToQuote(p)}
+                      className="border border-black px-4 py-2 text-sm hover:bg-black hover:text-white transition"
+                    >
+                      Add to Quote
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <button onClick={() => (window.location.href = "/portal/shop")} className="border rounded px-4 py-2 text-sm">
+              Shop Parts Catalog
+            </button>
+          </div>
+        </section>
       </div>
     </>
   );
